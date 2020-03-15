@@ -1,0 +1,118 @@
+segVars <-c("age","gender","income","kids","ownHome","subscribe")
+segVarType <- c("norm","binom","norm","pois","binom","binom")
+segNames <- c("Suburb mix","Urban hip","Travelers","Moving up")
+segSize <- c(100, 50, 80, 70)
+segMeans <- matrix(c(40, 0.5, 55000, 2, 0.5, 0.1, 24, 0.7,
+                       21000, 1, 0.2, 0.2, 58, 0.5, 64000, 0, 0.7, 0.05, 36, 0.3,
+                       52000, 2, 0.3, 0.2), ncol=length(segVars), byrow=TRUE)
+segSDs <- matrix(c(5, NA, 12000, NA, NA, NA, 2, NA, 5000, NA,
+                     NA, NA, 8, NA, 21000, NA, NA, NA, 4, NA, 10000, NA, NA, NA),
+                   ncol=length(segVars), byrow=TRUE)
+
+seg.df <- NULL
+set.seed(12345) #adjust or setting the rules making random number. 
+for(i in 1:length(segNames)){
+  cat(i, segNames[i], "\n")
+  this.seg <- data.frame(matrix(NA, nrow=segSize[i], ncol=length(segVars)))
+  for(j in 1:length(segVars)){
+    if(segVarType[j]=="norm"){
+      this.seg[,j] <- rnorm(segSize[i], mean=segMeans[i,j], sd=segSDs[i,j])
+    } else if(segVarType[j]=="pois"){
+      this.seg[,j] <- rpois(segSize[i], lambda=segMeans[i,j])
+    } else if(segVarType[j]=="binom"){
+      this.seg[,j] <- rbinom(segSize[i], size=1, prob=segMeans[i,j])
+    } else{
+      stop("Bad segment data type:", segVarType[j])
+    }
+  }
+  seg.df <- rbind(seg.df, this.seg)
+  }
+names(seg.df) <- segVars
+seg.df$segment <- factor(rep(segNames, times=segSize))
+seg.df$ownHome <- factor(seg.df$ownHome,
+                           labels=c("ownNo","ownYes"))
+seg.df$gender <- factor(seg.df$gender,
+                          labels=c("Female","Male"))
+seg.df$subscribe <- factor(seg.df$subscribe, labels=c("subNo",
+                                                        "subYes"))
+summary(seg.df)
+getwd()
+save(seg.df, file="Dataset/segdf.RData") #
+segdf.Rdata <- load("Dataset/segdf.RData")  
+
+mean(seg.df$income[seg.df$segment=="Moving up"])
+mean(seg.df$income[seg.df$segment=="Moving up" &
+                       seg.df$subscribe=="subNo"])
+
+by(seg.df$income, seg.df$segment, mean)
+aggregate(income~segment, data=seg.df, mean)
+
+by(seg.df$income, list(seg.df$segment, seg.df$subscribe),
+   mean)
+aggregate(seg.df$income, list(seg.df$segment,
+                                seg.df$subscribe), mean)
+aggregate(income~segment+subscribe, data=seg.df, mean)
+aggregate(income~segment+ownHome, data=seg.df, mean)
+
+with(seg.df, table(segment, ownHome))
+with(seg.df, table(kids, segment))
+
+aggregate(kids~segment, data=seg.df, sum)
+
+table(seg.df$subscribe, seg.df$segment)
+prop.table(table(seg.df$subscribe, seg.df$segment), margin=2)
+require(lattice)
+histogram( ~ subscribe | segment, data=seg.df)
+histogram( ~ subscribe | segment, data=seg.df, type="count",
+             layout=c(4,1))
+histogram( ~ subscribe | segment + ownHome, data=seg.df)
+
+seg.mean <- aggregate(income ~ segment, data=seg.df, mean)
+barchart(income ~ segment, data=seg.mean, col="grey")
+boxplot(income ~ segment, data=seg.df, ylab="income ($K)")
+summary(seg.df)
+boxplot(income ~ segment, data=seg.df, yaxt="n", ylab="income($K)") #와이축을 없애고, 축을 새로 정한다. axis로. 
+axis(side=2, at=seq(from=0, to=120000, by=20000),
+       labels=paste(seq(from=0, to=120000, by=20000)/1000, "k", sep=""),
+       las=1)
+
+
+bwplot(segment ~ income, data=seg.df, horizontal=TRUE,
+       xlab="income")
+bwplot(segment ~ income | ownHome, data=seg.df, horizontal=TRUE,
+         xlab="income")
+
+rep(c(1:4), times=c(25,25,25,20))
+tmp.tab <- table(rep(c(1:4), times=c(25,25,25,20)))
+chisq.test(tmp.tab)
+
+tmp.tab <- table(rep(c(1:4), times=c(25,25,25,10)))
+chisq.test(tmp.tab)
+
+hist(seg.df$income)
+with(seg.df, hist(income[ownHome=="ownYes"]))
+with(seg.df, hist(income[ownHome=="ownNo"]))
+t.test(income ~ ownHome, data=seg.df)
+t.test(income ~ ownHome, data=subset(seg.df, segment=="Travelers"))
+hist(seg.df$income)
+with(seg.df, hist(income[ownHome=="ownYes", segment=="Travelers"]))
+#일월분산분석, aov는 다양한 분석을 돌려놓는 것이다. 그 다음에 불러오기만 하면된다. 
+seg.aov.own <- aov(income~ownHome, data=seg.df)
+anova(seg.aov.own)
+#이원분산분석
+anova(aov(income~segment+ownHome, data=seg.df))
+#아노바 분석으로 내포된 모델간의 적합성 비교하기
+anova(aov(income ~ segment, data=seg.df), aov(income ~segment + ownHome, data=seg.df))
+seg.aov.own <- aov(income~ownHome+ownHome*segment+segment, data=seg.df)
+anova(seg.aov.own)
+
+seg.aov.own <- aov(income~ownHome+segment*ownHome+segment, data=seg.df)
+anova(seg.aov.own)
+
+library(multcomp)
+seg.aov <- aov(income ~ -1 + segment, data=seg.df)
+glht(seg.aov)
+
+plot(glht(seg.aov),xlab="Income", main="Average Income by Segment (95% CI)")
+
+seg.aov.step <- step(aov(income ~ ., data=seg.df))
