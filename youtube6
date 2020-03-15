@@ -1,0 +1,140 @@
+#install.packages('httr')
+#install.packages('rvest')
+#install.packages('RSelenium')
+#install.packages('XML')
+#install.packages('RCurl')
+
+library(httr)
+library(rvest)
+library(RSelenium)
+library(XML)
+library(RCurl)
+library(dplyr)
+
+remD <- remoteDriver(port=4445L,browserName="chrome")
+
+remD$open()
+remD$maxWindowSize(winHand = "current") # 창 최대화 해주기
+
+remD$navigate(paste0("https://www.youtube.com/channel/UCyT7JoYJl2usoWYhC1lXteQ/videos")) #주소 합쳐주기, 해당홈페이지로 이동
+
+for (i in 1:10){
+  a=i*500
+  b=i*500+1500 
+  remD$executeScript(paste0("window,scrollTo(",a,",",b,")"))}
+
+
+#[주의사항] 여기서 잠깐 대기 [5~10초]
+
+
+#[2단계]
+
+
+html <- remD$getPageSource()[[1]] #페이지 소스보기
+html <- read_html(html) # 페이지에서 에이치티엠엘 불러오기 
+
+
+# 제목 불러오기 
+youtube_title <-html %>% html_nodes("#video-title") %>%  html_text() #textizing with selected node.
+youtube_title <- youtube_title[1:7]
+youtube_title<-gsub("\n","",youtube_title)  #텍스트 변경
+youtube_title<-gsub(","," ",youtube_title)  #컴텍스트 변경 컴마는 없애줘야 해서 삭제
+youtube_title<-trimws(youtube_title) #공백제거
+youtube_title
+
+# 러닝타임 불러오기
+#%>% html_node("ytd-thumbnail-overlay-time-status-renderer") %>% html_node("spna")
+#overlays > ytd-thumbnail-overlay-time-status-renderer > span
+youtube_time <-html %>% html_nodes("#overlays") %>% html_text()#textizing with selected node.
+youtube_time <- youtube_time[1:7] 
+youtube_time<-gsub("\n","",youtube_time)  #텍스트 변경
+youtube_time<-gsub("지금 재생 중","",youtube_time)  #텍스트 변경
+youtube_time<-trimws(youtube_time) #공백제거
+youtube_time
+
+
+# 조회수 뷰 날짜 불러오기
+#<youtube_num <-html %>% html_nodes("#metadata-line") %>% html_text() #textizing with selected node.
+#youtube_num <- youtube_num[1:10]
+#youtube_num<-gsub("\n","",youtube_num)  #텍스트 변경
+#youtube_num<-gsub("조회수","뷰",youtube_num)  #텍스트 변경
+#youtube_num<-gsub("회",",",youtube_num)  #텍스트 변경
+#youtube_num<-trimws(youtube_num) #공백제거
+#youtube_num
+
+# 각 페이지 링크 불러오기
+youtube_link <-html %>% html_nodes("#thumbnail") %>% html_attr("href")
+youtube_link <- youtube_link[1:7]
+youtube_link<-gsub("/","https://www.youtube.com/",youtube_link)  #텍스트 변경
+youtube_link<-trimws(youtube_link) #공백제거
+youtube_link
+
+# [3단계]
+
+# 각 영상에 들어가서반복하기.
+b <- vector()
+b
+for (a in 1:7){
+  remD$navigate(youtube_link[a]) 
+  
+  # 아래로 크롤링해서 댓글 보이게 만들고,
+  for (i in 1:5){
+    length=i*150
+    length2=i*150+150 
+    remD$executeScript(paste0("window,scrollTo(",length,",",length2,")"))}
+  
+  html <- remD$getPageSource()[[1]] #페이지 소스보기
+  html <- read_html(html) # 페이지에서 에이치티엠엘 불러오기 
+  
+  youtube_date <-html %>% html_nodes("#date") %>% html_text()# 게시일 가져오기
+  youtube_date
+  
+  youtube_goodbad <-html %>% html_nodes("#text") %>% html_attr("aria-label") # 좋아요, 싫어요만 가져오기
+    if(is.na(youtube_goodbad[2])){goodbad <- youtube_goodbad[3:4]}else{goodbad <- youtube_goodbad[2:3]}
+  goodbad
+  
+  
+  youtube_count <-html %>% html_nodes("#count") %>% html_text("조회수") # 조회수, 댓글수 가져오기
+  youtube_count
+  
+  youtube_count<-gsub("\n","",youtube_count)  #텍스트 변경
+  youtube_count<-trimws(youtube_count) #공백제거
+  nusss <- gregexpr("회조회수", youtube_count) # 불필요한 문자열 제거, 회조회수가 몇번째 글자인지 확인
+  indicator_1 <- nusss[[2]][1] # 몇번째 글자인지 찾아서, 숫자로 만들기
+  youtube_count1<- substr(youtube_count,1,indicator_1) #조회수에서 필요한 숫자만 가져오기
+  youtube_count1 <- youtube_count1[2:3]
+  
+  
+  a <- list(youtube_date, goodbad, youtube_count1)
+  a
+  a <- unlist(a)
+  a
+  a<-gsub("좋아요 ","",a)  #텍스트 변경
+  a<-gsub("싫어요","",a)  #텍스트 변경
+  a<-gsub("조회수","",a)  #텍스트 변경
+  a<-gsub("댓글","",a)  #텍스트 변경
+  a<-gsub("회","",a)  #텍스트 변경
+  a<-gsub("개","",a)  #텍스트 변경
+  a<-trimws(a) #공백제거
+
+  a  
+  b <- rbind(b,a)}  
+b <- gsub("최초 공: ","",b)
+b <- gsub(",","",b)
+b <- gsub("없음","0",b)
+b <- gsub("•","",b)  # 여러가지 불필요한 텍스트 변경
+colnames(b) <- c("date","good","bad","view","comment") #열 이름 지정
+b
+is.array(b)
+
+# 각 array 합치기 
+youtube_sum <- cbind(youtube_title, youtube_time)
+youtube_sum <- cbind(youtube_sum,b)
+youtube_sum
+
+#[파일저장, 주소, 파일이름 바꾸어주기]
+write.table(youtube_sum,
+            file = "C:/selenium/앙작삐띠.txt",
+            sep=",",
+            row.names=FALSE,
+            quote = FALSE)
